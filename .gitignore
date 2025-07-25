@@ -1,1 +1,5 @@
 .env
+downloads/
+qbittorrent/config/
+clamav/db/
+gluetun/
