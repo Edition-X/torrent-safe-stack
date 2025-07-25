@@ -1,0 +1,58 @@
+services:
+  gluetun:
+    image: qmcgaw/gluetun:latest
+    container_name: gluetun
+    cap_add: [ NET_ADMIN ]
+    devices: [ "/dev/net/tun:/dev/net/tun" ]
+    environment:
+      - VPN_SERVICE_PROVIDER=custom
+      - VPN_TYPE=wireguard
+      - WIREGUARD_PRIVATE_KEY=${WIREGUARD_PRIVATE_KEY}
+      - WIREGUARD_PUBLIC_KEY=${WIREGUARD_PUBLIC_KEY}
+      - WIREGUARD_ADDRESSES=${WIREGUARD_ADDRESSES}
+      - WIREGUARD_ENDPOINT_IP=${WIREGUARD_ENDPOINT_IP}
+      - WIREGUARD_ENDPOINT_PORT=${WIREGUARD_ENDPOINT_PORT}
+      - WIREGUARD_PERSISTENT_KEEPALIVE=${WIREGUARD_PERSISTENT_KEEPALIVE}
+      - DOT=on
+      - FIREWALL_OUTBOUND_SUBNETS=${LAN_SUBNET}
+      - FIREWALL_INPUT_PORTS=8080
+      - TZ=${TZ}
+      - LOG_LEVEL=info
+    volumes:
+      - ./gluetun:/gluetun
+    ports:
+      - "8080:8080"          # qBittorrent WebUI
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "https://ipinfo.io/ip"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+  qbittorrent:
+    image: linuxserver/qbittorrent:4.5.5
+    container_name: qbittorrent
+    network_mode: "service:gluetun"
+    depends_on:
+      gluetun:
+        condition: service_healthy
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - WEBUI_PORT=8080
+      - QBT_Preferences__WebUI__BypassLocalAuth=true
+      - QBT_Preferences__WebUI__BypassAuthSubnetWhitelist=${LAN_SUBNET}
+    volumes:
+      - ./qbittorrent/config:/config
+      - ./downloads:/downloads
+    restart: unless-stopped
+
+  clamav:
+    build: ./clamav
+    container_name: clamav
+    volumes:
+      - ./downloads:/downloads            # must match qbittorrent
+      - ./clamav/db:/var/lib/clamav       # persist AV signatures
+    restart: unless-stopped
