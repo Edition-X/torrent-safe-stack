@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { useMediaLibrary, useContinueWatching, useWatchHistory } from '../hooks/useApi';
+import { useMediaLibrary, useContinueWatching, useWatchHistory, fetchSeasonEpisodes } from '../hooks/useApi';
 import HeroBanner from '../components/HeroBanner';
 import MediaRow from '../components/MediaRow';
 import Loading from '../components/Loading';
@@ -51,10 +51,17 @@ function extractEpisodeTitleFromFilename(rawTitle) {
   const match = base.match(/^(.*?)[._\s-]*(S\d{1,2}E\d{1,2}|\d{1,2}x\d{1,2})[._\s-]*(.*)$/i);
   if (match && match[3]) {
     let ep = match[3];
-    ep = ep.replace(/\b(720p|1080p|2160p|4K|HDTV|WEB|BluRay|HEVC|x265|x264|AAC|DDP|HDR|SDR)\b.*/gi, '');
-    ep = ep.replace(/[._]/g, ' ');
+    // Remove brackets and their contents first
     ep = ep.replace(/\[.*?\]/g, '');
-    return ep.trim();
+    // Remove quality indicators and everything after (can start at beginning or after separator)
+    ep = ep.replace(/^[._\s-]*(720p|1080p|2160p|4K|HDTV|WEB|BluRay|HEVC|x265|x264|AAC|DDP|HDR|SDR).*/gi, '');
+    ep = ep.replace(/[._\s-]+(720p|1080p|2160p|4K|HDTV|WEB|BluRay|HEVC|x265|x264|AAC|DDP|HDR|SDR).*/gi, '');
+    // Replace dots/underscores with spaces
+    ep = ep.replace(/[._]/g, ' ');
+    ep = ep.trim();
+    // If what's left is empty or just whitespace/dashes, there's no real episode name
+    if (!ep || /^[\s-]*$/.test(ep)) return '';
+    return ep;
   }
   return '';
 }
@@ -64,6 +71,7 @@ function Home() {
   const { data: continueWatching, loading: continueLoading } = useContinueWatching();
   const [randomIndex, setRandomIndex] = useState(null);
   const { data: watchHistory } = useWatchHistory();
+  const [tmdbEpisodeNames, setTmdbEpisodeNames] = useState({}); // { "showTitle:season:episode": "Episode Name" }
 
   // Generate random index once when data loads
   useEffect(() => {
@@ -86,6 +94,20 @@ function Home() {
       const looksLikeEpisode =
         season != null || episode != null || /[Ss]\d{1,2}[Ee]\d{1,2}/.test(continueWatching.path);
       
+      // Extract episode name from the saved title (Player saves the clean episode name)
+      // or fall back to extracting from filename
+      const filename = continueWatching.path.split(/[\\/]/).pop() || '';
+      const episodeNameFromFilename = extractEpisodeTitleFromFilename(filename);
+      // If the saved title looks like a clean episode name (no dots, no SxxEyy, no quality tags), use it
+      const savedTitleLooksClean = continueWatching.title &&
+        !continueWatching.title.includes('.') &&
+        !/S\d{1,2}E\d{1,2}/i.test(continueWatching.title) &&
+        !/\d{1,2}x\d{1,2}/.test(continueWatching.title) &&
+        !/\b(720p|1080p|2160p|4K|HDTV|WEB|BluRay|HEVC|x265|x264)\b/i.test(continueWatching.title);
+      const episodeName = savedTitleLooksClean
+        ? continueWatching.title
+        : (episodeNameFromFilename || null);
+      
       return {
         title: displayTitle,
         path: continueWatching.path,
@@ -96,7 +118,8 @@ function Home() {
         _currentTime: continueWatching.currentTime,
         _duration: continueWatching.duration,
         _season: continueWatching.season != null ? continueWatching.season : season,
-        _episode: continueWatching.episode != null ? continueWatching.episode : episode
+        _episode: continueWatching.episode != null ? continueWatching.episode : episode,
+        _episodeName: looksLikeEpisode ? episodeName : null
       };
     }
     
@@ -137,10 +160,21 @@ function Home() {
   const previouslyWatchedMovies = useMemo(() => {
     if (!watchHistory) return [];
 
+    // Build lookup maps for movies and TV episodes
     const moviesByPath = new Map();
+    const episodesByPath = new Map();
     if (data?.movies) {
       for (const movie of data.movies) {
         moviesByPath.set(movie.path, movie);
+      }
+    }
+    if (data?.tvShows) {
+      for (const show of data.tvShows) {
+        for (const season of (show.seasons || [])) {
+          for (const ep of (season.episodes || [])) {
+            episodesByPath.set(ep.path, { episode: ep, show, season });
+          }
+        }
       }
     }
 
@@ -152,11 +186,32 @@ function Home() {
       if (!h?.path || seenPaths.has(h.path)) continue;
       seenPaths.add(h.path);
 
-      const existing = moviesByPath.get(h.path);
+      const existingMovie = moviesByPath.get(h.path);
+      const existingEpisode = episodesByPath.get(h.path);
 
-      if (existing) {
-        // Use current library metadata
-        items.push(existing);
+      if (existingMovie) {
+        // Use current library metadata for movies
+        items.push(existingMovie);
+      } else if (existingEpisode) {
+        // TV episode still in library - create a card with TMDB episode name
+        const { episode: ep, show, season: seasonData } = existingEpisode;
+        const cacheKey = `${show.title}:${seasonData.seasonNumber}:${ep.episodeNumber}`;
+        const tmdbName = tmdbEpisodeNames[cacheKey];
+        const episodeTitle = tmdbName || ep.title || `Episode ${ep.episodeNumber}`;
+        items.push({
+          id: `history-${encodeURIComponent(h.path)}`,
+          title: episodeTitle,
+          type: 'movie',
+          year: show.year || null,
+          quality: ep.quality || null,
+          path: h.path,
+          sizeFormatted: ep.sizeFormatted || null,
+          _isEpisode: true,
+          _showTitle: show.title,
+          _episodeName: tmdbName || ep.title || null,
+          _season: seasonData.seasonNumber,
+          _episode: ep.episodeNumber
+        });
       } else {
         // Create a stub item for entries that are no longer in the library
         const filename = h.path.split(/[\\/]/).pop() || '';
@@ -169,22 +224,31 @@ function Home() {
 
         // For the episode title, prefer what's saved in history if it looks like a clean episode name,
         // otherwise extract from filename (the part after SxxEyy)
-        let episodeTitle = '';
+        let episodeName = null;
         if (isEpisode) {
           const episodeFromFilename = extractEpisodeTitleFromFilename(filename);
-          // Only use h.title if it doesn't look like a full filename (no dots, no S01E01 pattern)
+          // Only use h.title if it doesn't look like a full filename or quality tags
           const historyTitleLooksClean = h.title && 
             !h.title.includes('.') && 
             !/S\d{1,2}E\d{1,2}/i.test(h.title) &&
-            !/\d{1,2}x\d{1,2}/.test(h.title);
-          episodeTitle = historyTitleLooksClean ? h.title : (episodeFromFilename || `Episode ${episode}`);
-        } else {
-          episodeTitle = cleanTitle(filename);
+            !/\d{1,2}x\d{1,2}/.test(h.title) &&
+            !/\b(720p|1080p|2160p|4K|HDTV|WEB|BluRay|HEVC|x265|x264)\b/i.test(h.title);
+          episodeName = historyTitleLooksClean ? h.title : (episodeFromFilename || null);
         }
+
+        // Check TMDB cache for episode name
+        const cacheKey = isEpisode ? `${showTitle}:${h.season != null ? h.season : season}:${h.episode != null ? h.episode : episode}` : null;
+        const tmdbName = cacheKey ? tmdbEpisodeNames[cacheKey] : null;
+        const finalEpisodeName = tmdbName || episodeName;
+
+        // For the card title: use TMDB name, then episode name, then "Episode X"
+        const cardTitle = isEpisode 
+          ? (finalEpisodeName || `Episode ${episode}`)
+          : cleanTitle(filename);
 
         items.push({
           id: `history-${encodeURIComponent(h.path)}`,
-          title: episodeTitle,
+          title: cardTitle,
           type: 'movie',
           year: h.year || null,
           quality: null,
@@ -193,6 +257,7 @@ function Home() {
           // Extra metadata for TV episodes so cards can show season/episode nicely
           _isEpisode: isEpisode,
           _showTitle: showTitle,
+          _episodeName: finalEpisodeName,
           _season: h.season != null ? h.season : season,
           _episode: h.episode != null ? h.episode : episode
         });
@@ -202,7 +267,52 @@ function Home() {
     }
 
     return items;
-  }, [watchHistory, data]);
+  }, [watchHistory, data, tmdbEpisodeNames]);
+
+  // Fetch TMDB episode names for TV episodes in Previously Watched
+  useEffect(() => {
+    if (!previouslyWatchedMovies.length) return;
+
+    // Find unique show+season combinations that need TMDB data
+    const toFetch = new Map(); // "showTitle:season" -> [{ item, episodeNumber }]
+    for (const item of previouslyWatchedMovies) {
+      if (!item._isEpisode || !item._showTitle || !item._season) continue;
+      // Skip if we already have the name or it's not "Episode X"
+      if (item._episodeName && !/^Episode \d+$/.test(item._episodeName)) continue;
+      if (item.title && !/^Episode \d+$/.test(item.title)) continue;
+      
+      const key = `${item._showTitle}:${item._season}`;
+      const cacheKey = `${item._showTitle}:${item._season}:${item._episode}`;
+      if (tmdbEpisodeNames[cacheKey]) continue; // Already fetched
+      
+      if (!toFetch.has(key)) toFetch.set(key, []);
+      toFetch.get(key).push({ item, episodeNumber: item._episode });
+    }
+
+    if (toFetch.size === 0) return;
+
+    // Fetch TMDB data for each show+season
+    for (const [key, episodes] of toFetch) {
+      const [showTitle, seasonStr] = key.split(':');
+      const season = parseInt(seasonStr, 10);
+      
+      fetchSeasonEpisodes(showTitle, season).then(data => {
+        if (!data?.episodes) return;
+        
+        const newNames = {};
+        for (const { episodeNumber } of episodes) {
+          const tmdbEp = data.episodes.find(e => e.episodeNumber === episodeNumber);
+          if (tmdbEp?.name) {
+            newNames[`${showTitle}:${season}:${episodeNumber}`] = tmdbEp.name;
+          }
+        }
+        
+        if (Object.keys(newNames).length > 0) {
+          setTmdbEpisodeNames(prev => ({ ...prev, ...newNames }));
+        }
+      }).catch(() => {}); // Ignore errors
+    }
+  }, [previouslyWatchedMovies, tmdbEpisodeNames]);
 
   if (loading) return <Loading message="Loading your library..." />;
 

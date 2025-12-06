@@ -98,16 +98,34 @@ function Player() {
   // Prefer a clean episode name when we know this is a TV episode
   let episodeNameFromState = playbackMeta?.episodeName;
   if (isEpisodeFromState && !episodeNameFromState) {
-    // Try to extract the part after SxxEyy / 1x01 from the cleaned filename
-    const match = baseTitle.match(/^(.*?)[\s-]*(S\d{1,2}E\d{1,2}|\d{1,2}x\d{1,2})[\s-]*(.*)$/i);
+    // Try to extract the part after SxxEyy / 1x01 from the filename
+    const match = fileName.match(/^(.*?)[._\s-]*(S\d{1,2}E\d{1,2}|\d{1,2}x\d{1,2})[._\s-]*(.*)$/i);
     if (match && match[3]) {
-      episodeNameFromState = match[3].trim();
+      let ep = match[3];
+      // Remove file extension
+      ep = ep.replace(/\.[^/.]+$/, '');
+      // Remove brackets and their contents first
+      ep = ep.replace(/\[.*?\]/g, '');
+      // Remove quality indicators and everything after (can start at beginning or after separator)
+      ep = ep.replace(/^[._\s-]*(720p|1080p|2160p|4K|HDTV|WEB|BluRay|HEVC|x265|x264|AAC|DDP|HDR|SDR).*/gi, '');
+      ep = ep.replace(/[._\s-]+(720p|1080p|2160p|4K|HDTV|WEB|BluRay|HEVC|x265|x264|AAC|DDP|HDR|SDR).*/gi, '');
+      // Replace dots/underscores with spaces
+      ep = ep.replace(/[._]/g, ' ');
+      ep = ep.trim();
+      episodeNameFromState = ep || null;
     }
   }
 
-  const displayTitle = isEpisodeFromState && episodeNameFromState
-    ? episodeNameFromState
-    : baseTitle;
+  // For TV episodes: show episode name if available, otherwise show "Show Title - SxxEyy"
+  // For movies: show the cleaned filename
+  let displayTitle = baseTitle;
+  if (isEpisodeFromState) {
+    if (episodeNameFromState) {
+      displayTitle = episodeNameFromState;
+    } else if (playbackMeta.showTitle && playbackMeta.season && playbackMeta.episode) {
+      displayTitle = `${playbackMeta.showTitle} - S${String(playbackMeta.season).padStart(2, '0')}E${String(playbackMeta.episode).padStart(2, '0')}`;
+    }
+  }
 
   const watchType = isEpisodeFromState ? 'episode' : 'movie';
   const watchShowTitle = isEpisodeFromState ? playbackMeta.showTitle : undefined;

@@ -253,7 +253,7 @@ function MediaCard({ item, type = 'movie', historyEntry }) {
             <>
               {item._isEpisode ? (
                 <div className="flex flex-col">
-                  <span className="truncate">{item._showTitle || item.title}</span>
+                  <span className="truncate">{item._showTitle}</span>
                   {item._season && item._episode && (
                     <span className="text-[0.7rem] text-gray-500">
                       S{String(item._season).padStart(2, '0')} • E{String(item._episode).padStart(2, '0')}

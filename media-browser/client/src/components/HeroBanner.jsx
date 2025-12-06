@@ -12,6 +12,7 @@ function HeroBanner({ item, type = 'movie' }) {
   const isTvEpisode = isContinueWatching && item?._type === 'tv';
   const seasonNumber = isTvEpisode ? item?._season : null;
   const episodeNumber = isTvEpisode ? item?._episode : null;
+  const episodeName = isTvEpisode ? item?._episodeName : null;
   
   // For continue watching, use the direct path; otherwise use show/movie logic
   const playPath = !item ? '/' : isContinueWatching
@@ -30,7 +31,8 @@ function HeroBanner({ item, type = 'movie' }) {
         type: 'episode',
         showTitle: item.title,
         season: seasonNumber,
-        episode: episodeNumber
+        episode: episodeNumber,
+        episodeName: episodeName || undefined
       }
     : undefined;
 
@@ -145,7 +147,8 @@ function HeroBanner({ item, type = 'movie' }) {
               {isTvEpisode && seasonNumber && episodeNumber && (
                 <>
                   {formatTimeRemaining() ? ' • ' : ''}
-                  Season {seasonNumber}, Episode {episodeNumber}
+                  S{String(seasonNumber).padStart(2, '0')}E{String(episodeNumber).padStart(2, '0')}
+                  {episodeName && ` — ${episodeName}`}
                 </>
               )}
             </>
