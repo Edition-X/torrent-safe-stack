@@ -83,13 +83,36 @@ function Player() {
   // Use probed duration for transcoded videos, video element duration for direct streams
   const totalDuration = isTranscoding && mediaInfo?.duration ? mediaInfo.duration : duration;
   
-  // Extract filename for display
+  // Extract filename and build base title
   const fileName = videoPath.split('/').pop() || 'Video';
-  const displayTitle = fileName
+  const baseTitle = fileName
     .replace(/\.[^/.]+$/, '')
     .replace(/\./g, ' ')
     .replace(/\[.*?\]/g, '')
     .trim();
+
+  // Metadata passed from routes for TV episodes (ShowDetails, Hero continue watching, next episode)
+  const playbackMeta = (location && location.state) || {};
+  const isEpisodeFromState = playbackMeta?.type === 'episode';
+
+  // Prefer a clean episode name when we know this is a TV episode
+  let episodeNameFromState = playbackMeta?.episodeName;
+  if (isEpisodeFromState && !episodeNameFromState) {
+    // Try to extract the part after SxxEyy / 1x01 from the cleaned filename
+    const match = baseTitle.match(/^(.*?)[\s-]*(S\d{1,2}E\d{1,2}|\d{1,2}x\d{1,2})[\s-]*(.*)$/i);
+    if (match && match[3]) {
+      episodeNameFromState = match[3].trim();
+    }
+  }
+
+  const displayTitle = isEpisodeFromState && episodeNameFromState
+    ? episodeNameFromState
+    : baseTitle;
+
+  const watchType = isEpisodeFromState ? 'episode' : 'movie';
+  const watchShowTitle = isEpisodeFromState ? playbackMeta.showTitle : undefined;
+  const watchSeason = isEpisodeFromState ? playbackMeta.season : undefined;
+  const watchEpisode = isEpisodeFromState ? playbackMeta.episode : undefined;
 
   // Use auto-subtitle endpoint - include start time offset for transcoded videos
   const autoSubtitleUrl = isTranscoding && transcodeStartTime > 0
@@ -235,7 +258,16 @@ function Player() {
   // Play next episode handler
   const playNextEpisode = useCallback(() => {
     if (!nextEpisode?.path) return;
-    navigate(`/play/${encodeURIComponent(nextEpisode.path)}`);
+
+    const nextState = {
+      type: 'episode',
+      showTitle: nextEpisode.showTitle,
+      season: nextEpisode.seasonNumber,
+      episode: nextEpisode.episodeNumber,
+      episodeName: nextEpisode.title || undefined
+    };
+
+    navigate(`/play/${encodeURIComponent(nextEpisode.path)}`, { state: nextState });
   }, [nextEpisode, navigate]);
 
   // Cancel auto-play
@@ -286,7 +318,10 @@ function Player() {
         saveWatchProgress({
           path: videoPath,
           title: displayTitle,
-          type: 'movie', // Will be overridden if episode info available
+          type: watchType,
+          showTitle: watchShowTitle,
+          season: watchSeason,
+          episode: watchEpisode,
           currentTime: actualTime,
           duration: actualDuration
         });
@@ -300,7 +335,8 @@ function Player() {
   useEffect(() => {
     if (!videoPath || !totalDuration || hasMarkedCompleted) return;
 
-    const percent = totalDuration > 0 ? (actualCurrentTime / totalDuration) * 100 : 0;
+    const actualTime = isTranscoding ? transcodeStartTime + currentTime : currentTime;
+    const percent = totalDuration > 0 ? (actualTime / totalDuration) * 100 : 0;
     if (percent >= 95) {
       setHasMarkedCompleted(true);
       const finalTime = totalDuration;
@@ -309,12 +345,15 @@ function Player() {
       saveWatchProgress({
         path: videoPath,
         title: displayTitle,
-        type: 'movie',
+        type: watchType,
+        showTitle: watchShowTitle,
+        season: watchSeason,
+        episode: watchEpisode,
         currentTime: finalTime,
         duration: totalDuration
       });
     }
-  }, [videoPath, totalDuration, actualCurrentTime, displayTitle, hasMarkedCompleted]);
+  }, [videoPath, totalDuration, currentTime, transcodeStartTime, isTranscoding, displayTitle, hasMarkedCompleted, watchType, watchShowTitle, watchSeason, watchEpisode]);
 
   // Save progress on pause and before leaving
   useEffect(() => {
@@ -327,7 +366,10 @@ function Player() {
         saveWatchProgress({
           path: videoPath,
           title: displayTitle,
-          type: 'movie',
+          type: watchType,
+          showTitle: watchShowTitle,
+          season: watchSeason,
+          episode: watchEpisode,
           currentTime: actualTime,
           duration: actualDuration
         });

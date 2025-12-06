@@ -9,6 +9,9 @@ function HeroBanner({ item, type = 'movie' }) {
 
   const isShow = type === 'tv';
   const isContinueWatching = item?._continueWatching;
+  const isTvEpisode = isContinueWatching && item?._type === 'tv';
+  const seasonNumber = isTvEpisode ? item?._season : null;
+  const episodeNumber = isTvEpisode ? item?._episode : null;
   
   // For continue watching, use the direct path; otherwise use show/movie logic
   const playPath = !item ? '/' : isContinueWatching
@@ -20,6 +23,16 @@ function HeroBanner({ item, type = 'movie' }) {
       : `/play/${encodeURIComponent(item.path)}`;
   
   const detailPath = !item ? '/' : isShow ? `/tv/${item.id}` : playPath;
+
+  // Optional route state for TV episodes so Player knows episode metadata
+  const playState = isTvEpisode && seasonNumber && episodeNumber
+    ? {
+        type: 'episode',
+        showTitle: item.title,
+        season: seasonNumber,
+        episode: episodeNumber
+      }
+    : undefined;
 
   // Fetch backdrop image from TMDB - reset when item changes
   useEffect(() => {
@@ -127,7 +140,15 @@ function HeroBanner({ item, type = 'movie' }) {
         {/* Meta info */}
         <p className="text-gray-300 mb-4 text-lg">
           {isContinueWatching ? (
-            formatTimeRemaining()
+            <>
+              {formatTimeRemaining()}
+              {isTvEpisode && seasonNumber && episodeNumber && (
+                <>
+                  {formatTimeRemaining() ? ' • ' : ''}
+                  Season {seasonNumber}, Episode {episodeNumber}
+                </>
+              )}
+            </>
           ) : isShow ? (
             <>
               {item.seasons?.length} Season{item.seasons?.length !== 1 ? 's' : ''} 
@@ -157,6 +178,7 @@ function HeroBanner({ item, type = 'movie' }) {
         <div className="flex flex-wrap gap-4">
           <Link
             to={playPath}
+            state={playState}
             className="flex items-center space-x-2 bg-white text-black px-6 py-3 rounded-lg font-semibold hover:bg-gray-200 transition-colors"
           >
             <Play size={24} fill="black" />

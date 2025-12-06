@@ -194,6 +194,14 @@ function ShowDetails() {
                   const progress = historyEntry?.progress || 0;
                   const isUnavailable = historyEntry && historyEntry.available === false;
 
+                  const playbackState = {
+                    type: 'episode',
+                    showTitle: show?.title,
+                    season: season.seasonNumber,
+                    episode: episode.episodeNumber,
+                    episodeName: tmdbEp?.name || `Episode ${episode.episodeNumber}`
+                  };
+
                   const content = (
                     <>
                       {/* Episode thumbnail */}
@@ -295,6 +303,7 @@ function ShowDetails() {
                     <Link
                       key={episode.episodeNumber}
                       to={`/play/${encodeURIComponent(episode.path)}`}
+                      state={playbackState}
                       className="flex gap-4 bg-gray-900/50 hover:bg-gray-800 rounded-lg overflow-hidden transition-colors group"
                     >
                       {content}

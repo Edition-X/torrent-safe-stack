@@ -22,6 +22,43 @@ function cleanTitle(rawTitle) {
   return title.trim();
 }
 
+// Try to extract season/episode numbers from a path or title
+function extractEpisodeInfo(path, title) {
+  const source = `${title || ''} ${path || ''}`;
+
+  let match = source.match(/[Ss](\d{1,2})[Ee](\d{1,2})/);
+  if (match) {
+    return {
+      season: parseInt(match[1], 10),
+      episode: parseInt(match[2], 10)
+    };
+  }
+
+  match = source.match(/(\d{1,2})x(\d{1,2})/);
+  if (match) {
+    return {
+      season: parseInt(match[1], 10),
+      episode: parseInt(match[2], 10)
+    };
+  }
+
+  return { season: null, episode: null };
+}
+
+function extractEpisodeTitleFromFilename(rawTitle) {
+  if (!rawTitle) return '';
+  const base = rawTitle.replace(/\.[^/.]+$/, '');
+  const match = base.match(/^(.*?)[._\s-]*(S\d{1,2}E\d{1,2}|\d{1,2}x\d{1,2})[._\s-]*(.*)$/i);
+  if (match && match[3]) {
+    let ep = match[3];
+    ep = ep.replace(/\b(720p|1080p|2160p|4K|HDTV|WEB|BluRay|HEVC|x265|x264|AAC|DDP|HDR|SDR)\b.*/gi, '');
+    ep = ep.replace(/[._]/g, ' ');
+    ep = ep.replace(/\[.*?\]/g, '');
+    return ep.trim();
+  }
+  return '';
+}
+
 function Home() {
   const { data, loading, error } = useMediaLibrary();
   const { data: continueWatching, loading: continueLoading } = useContinueWatching();
@@ -44,8 +81,10 @@ function Home() {
     if (continueWatching) {
       // Use showTitle if available, otherwise clean the raw title
       const displayTitle = continueWatching.showTitle || cleanTitle(continueWatching.title);
-      // Detect if this looks like a TV episode
-      const looksLikeEpisode = /[Ss]\d{1,2}[Ee]\d{1,2}/.test(continueWatching.path);
+      // Detect if this looks like a TV episode and extract season/episode
+      const { season, episode } = extractEpisodeInfo(continueWatching.path, continueWatching.title);
+      const looksLikeEpisode =
+        season != null || episode != null || /[Ss]\d{1,2}[Ee]\d{1,2}/.test(continueWatching.path);
       
       return {
         title: displayTitle,
@@ -55,7 +94,9 @@ function Home() {
         _continueWatching: true,
         _progress: continueWatching.progress,
         _currentTime: continueWatching.currentTime,
-        _duration: continueWatching.duration
+        _duration: continueWatching.duration,
+        _season: continueWatching.season != null ? continueWatching.season : season,
+        _episode: continueWatching.episode != null ? continueWatching.episode : episode
       };
     }
     
@@ -111,25 +152,49 @@ function Home() {
       if (!h?.path || seenPaths.has(h.path)) continue;
       seenPaths.add(h.path);
 
-      // Only include entries that look like movies (episodes will be visualized on the show page)
-      if (h.type && h.type !== 'movie') continue;
-
       const existing = moviesByPath.get(h.path);
 
       if (existing) {
         // Use current library metadata
         items.push(existing);
       } else {
-        // Create a stub item for movies that are no longer in the library
-        const title = h.title || h.path.split(/[\\/]/).pop();
+        // Create a stub item for entries that are no longer in the library
+        const filename = h.path.split(/[\\/]/).pop() || '';
+        const { season, episode } = extractEpisodeInfo(h.path, filename);
+        const isEpisode = h.type === 'episode' || (season != null && episode != null);
+
+        // For the show title, always derive from filename (the part before SxxEyy)
+        const showTitleFromFilename = cleanTitle(filename);
+        const showTitle = h.showTitle ? cleanTitle(h.showTitle) : showTitleFromFilename;
+
+        // For the episode title, prefer what's saved in history if it looks like a clean episode name,
+        // otherwise extract from filename (the part after SxxEyy)
+        let episodeTitle = '';
+        if (isEpisode) {
+          const episodeFromFilename = extractEpisodeTitleFromFilename(filename);
+          // Only use h.title if it doesn't look like a full filename (no dots, no S01E01 pattern)
+          const historyTitleLooksClean = h.title && 
+            !h.title.includes('.') && 
+            !/S\d{1,2}E\d{1,2}/i.test(h.title) &&
+            !/\d{1,2}x\d{1,2}/.test(h.title);
+          episodeTitle = historyTitleLooksClean ? h.title : (episodeFromFilename || `Episode ${episode}`);
+        } else {
+          episodeTitle = cleanTitle(filename);
+        }
+
         items.push({
           id: `history-${encodeURIComponent(h.path)}`,
-          title,
+          title: episodeTitle,
           type: 'movie',
           year: h.year || null,
           quality: null,
           path: h.path,
-          sizeFormatted: null
+          sizeFormatted: null,
+          // Extra metadata for TV episodes so cards can show season/episode nicely
+          _isEpisode: isEpisode,
+          _showTitle: showTitle,
+          _season: h.season != null ? h.season : season,
+          _episode: h.episode != null ? h.episode : episode
         });
       }
 

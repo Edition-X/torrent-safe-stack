@@ -37,11 +37,23 @@ function MediaCard({ item, type = 'movie', historyEntry }) {
   const isUnavailable = historyEntry && historyEntry.available === false;
   
   const linkPath = isShow ? `/tv/${item.id}` : `/play/${encodeURIComponent(item.path)}`;
+  const firstSeason = isShow ? item.seasons?.[0] : null;
+  const firstEpisode = firstSeason?.episodes?.[0];
   const playPath = isShow 
-    ? (item.seasons?.[0]?.episodes?.[0] 
-        ? `/play/${encodeURIComponent(item.seasons[0].episodes[0].path)}` 
+    ? (firstEpisode 
+        ? `/play/${encodeURIComponent(firstEpisode.path)}` 
         : linkPath)
     : linkPath;
+
+  const playState = isShow && firstSeason && firstEpisode
+    ? {
+        type: 'episode',
+        showTitle: item.title,
+        season: firstSeason.seasonNumber,
+        episode: firstEpisode.episodeNumber,
+        episodeName: firstEpisode.title || `Episode ${firstEpisode.episodeNumber}`
+      }
+    : undefined;
 
   // Get thumbnail path - for TV shows, use first episode (fallback)
   const thumbnailPath = isShow 
@@ -51,8 +63,10 @@ function MediaCard({ item, type = 'movie', historyEntry }) {
   // Fetch poster from TMDB on mount
   useEffect(() => {
     let cancelled = false;
-    
-    fetchPosterUrl(isShow ? 'tv' : 'movie', item.title, item.year)
+    const useTvMetadata = isShow || item._isEpisode;
+    const posterTitle = useTvMetadata && item._showTitle ? item._showTitle : item.title;
+
+    fetchPosterUrl(useTvMetadata ? 'tv' : 'movie', posterTitle, item.year)
       .then(url => {
         if (!cancelled) {
           setPosterUrl(url);
@@ -61,7 +75,7 @@ function MediaCard({ item, type = 'movie', historyEntry }) {
       });
     
     return () => { cancelled = true; };
-  }, [item.title, item.year, isShow]);
+  }, [item.title, item.year, isShow, item._isEpisode, item._showTitle]);
 
   // Use poster if available, otherwise fall back to thumbnail
   const imageUrl = posterUrl || (thumbnailPath ? getThumbnailUrl(thumbnailPath) : null);
@@ -208,6 +222,7 @@ function MediaCard({ item, type = 'movie', historyEntry }) {
             <div className="flex space-x-3">
               <Link
                 to={playPath}
+                state={playState}
                 className="bg-white rounded-full p-3 text-black hover:scale-110 transition-transform"
                 onClick={(e) => e.stopPropagation()}
               >
@@ -236,17 +251,30 @@ function MediaCard({ item, type = 'movie', historyEntry }) {
             <span>{item.episodeCount} episode{item.episodeCount !== 1 ? 's' : ''}</span>
           ) : (
             <>
-              {item.year && (
-                <span className="flex items-center">
-                  <Calendar size={10} className="mr-1" />
-                  {item.year}
-                </span>
-              )}
-              {item.sizeFormatted && (
-                <span className="flex items-center">
-                  <HardDrive size={10} className="mr-1" />
-                  {item.sizeFormatted}
-                </span>
+              {item._isEpisode ? (
+                <div className="flex flex-col">
+                  <span className="truncate">{item._showTitle || item.title}</span>
+                  {item._season && item._episode && (
+                    <span className="text-[0.7rem] text-gray-500">
+                      S{String(item._season).padStart(2, '0')} • E{String(item._episode).padStart(2, '0')}
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <>
+                  {item.year && (
+                    <span className="flex items-center">
+                      <Calendar size={10} className="mr-1" />
+                      {item.year}
+                    </span>
+                  )}
+                  {item.sizeFormatted && (
+                    <span className="flex items-center">
+                      <HardDrive size={10} className="mr-1" />
+                      {item.sizeFormatted}
+                    </span>
+                  )}
+                </>
               )}
             </>
           )}
