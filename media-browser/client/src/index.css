@@ -1,0 +1,93 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+}
+
+body {
+  margin: 0;
+  background-color: #141414;
+  color: white;
+  min-height: 100vh;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #141414;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #404040;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #606060;
+}
+
+/* Horizontal scroll for carousels */
+.scroll-container {
+  scrollbar-width: thin;
+  scrollbar-color: #404040 transparent;
+}
+
+.scroll-container::-webkit-scrollbar {
+  height: 6px;
+}
+
+.scroll-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scroll-container::-webkit-scrollbar-thumb {
+  background: #404040;
+  border-radius: 3px;
+}
+
+/* Card hover effects */
+.media-card {
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.media-card:hover {
+  transform: scale(1.05);
+  z-index: 10;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8);
+}
+
+/* Video player container */
+.video-container {
+  position: relative;
+  width: 100%;
+  background: black;
+}
+
+.video-container video {
+  width: 100%;
+  max-height: 80vh;
+}
+
+/* Loading spinner */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.spinner {
+  animation: spin 1s linear infinite;
+}
+
+/* Gradient overlays */
+.gradient-bottom {
+  background: linear-gradient(to top, rgba(20, 20, 20, 1) 0%, rgba(20, 20, 20, 0) 100%);
+}
+
+.gradient-right {
+  background: linear-gradient(to left, rgba(20, 20, 20, 1) 0%, rgba(20, 20, 20, 0) 100%);
+}

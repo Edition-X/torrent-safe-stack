@@ -1,0 +1,17 @@
+{
+  "name": "media-browser-server",
+  "version": "1.0.0",
+  "description": "Backend API for Netflix-style media browser",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "test": "node --test tests/"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "http-proxy-middleware": "^3.0.5",
+    "mime-types": "^2.1.35"
+  }
+}

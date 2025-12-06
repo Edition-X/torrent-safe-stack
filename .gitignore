@@ -3,3 +3,11 @@ downloads/
 qbittorrent/config/
 clamav/db/
 gluetun/
+.DS_Store
+dls/
+media-browser/data/
+media-browser/client/node_modules/
+media-browser/client/dist/
+media-browser/client/.vite/
+media-browser/server/node_modules/
+node_modules/
