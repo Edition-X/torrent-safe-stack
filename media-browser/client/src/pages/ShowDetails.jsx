@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Play, ChevronDown, ChevronUp, HardDrive, Subtitles, Star, Clock } from 'lucide-react';
-import { useTvShow, fetchTvDetails, fetchSeasonEpisodes } from '../hooks/useApi';
+import { useTvShow, fetchTvDetails, fetchSeasonEpisodes, useWatchHistory } from '../hooks/useApi';
 import Loading from '../components/Loading';
 
 function ShowDetails() {
@@ -13,6 +13,18 @@ function ShowDetails() {
   const [tmdbDetails, setTmdbDetails] = useState(null);
   const [seasonEpisodes, setSeasonEpisodes] = useState({}); // { seasonNumber: episodesData }
   const [backdropLoaded, setBackdropLoaded] = useState(false);
+  const { data: watchHistory } = useWatchHistory();
+
+  const historyByPath = useMemo(() => {
+    const map = {};
+    if (!watchHistory) return map;
+    for (const item of watchHistory) {
+      if (item && item.path) {
+        map[item.path] = item;
+      }
+    }
+    return map;
+  }, [watchHistory]);
 
   // Fetch TMDB details when show loads
   useEffect(() => {
@@ -178,13 +190,12 @@ function ShowDetails() {
                   const tmdbEp = seasonEpisodes[season.seasonNumber]?.episodes?.find(
                     e => e.episodeNumber === episode.episodeNumber
                   );
-                  
-                  return (
-                    <Link
-                      key={episode.episodeNumber}
-                      to={`/play/${encodeURIComponent(episode.path)}`}
-                      className="flex gap-4 bg-gray-900/50 hover:bg-gray-800 rounded-lg overflow-hidden transition-colors group"
-                    >
+                  const historyEntry = historyByPath[episode.path];
+                  const progress = historyEntry?.progress || 0;
+                  const isUnavailable = historyEntry && historyEntry.available === false;
+
+                  const content = (
+                    <>
                       {/* Episode thumbnail */}
                       <div className="relative w-40 sm:w-52 flex-shrink-0 aspect-video bg-gray-800">
                         {tmdbEp?.stillPath ? (
@@ -208,6 +219,15 @@ function ShowDetails() {
                         {tmdbEp?.runtime && (
                           <div className="absolute bottom-1 right-1 bg-black/80 text-white text-xs px-1.5 py-0.5 rounded">
                             {tmdbEp.runtime}m
+                          </div>
+                        )}
+                        {/* Episode watch progress bar */}
+                        {progress > 0 && (
+                          <div className="absolute bottom-0 left-0 w-full h-1 bg-black/50">
+                            <div
+                              className="h-full bg-netflix-red"
+                              style={{ width: `${Math.min(progress, 100)}%` }}
+                            />
                           </div>
                         )}
                       </div>
@@ -241,6 +261,11 @@ function ShowDetails() {
                                   {tmdbEp.rating.toFixed(1)}
                                 </span>
                               )}
+                              {isUnavailable && (
+                                <span className="bg-black/70 text-xs text-gray-200 px-2 py-0.5 rounded">
+                                  Unavailable
+                                </span>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -252,6 +277,27 @@ function ShowDetails() {
                           </p>
                         )}
                       </div>
+                    </>
+                  );
+                  
+                  if (isUnavailable) {
+                    return (
+                      <div
+                        key={episode.episodeNumber}
+                        className="flex gap-4 bg-gray-900/30 rounded-lg overflow-hidden opacity-70 cursor-not-allowed group"
+                      >
+                        {content}
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <Link
+                      key={episode.episodeNumber}
+                      to={`/play/${encodeURIComponent(episode.path)}`}
+                      className="flex gap-4 bg-gray-900/50 hover:bg-gray-800 rounded-lg overflow-hidden transition-colors group"
+                    >
+                      {content}
                     </Link>
                   );
                 })}

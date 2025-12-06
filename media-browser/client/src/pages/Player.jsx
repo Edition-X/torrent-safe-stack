@@ -39,6 +39,7 @@ function Player() {
   const [transcodeStartTime, setTranscodeStartTime] = useState(0); // For seeking in transcoded videos
   const [savedProgress, setSavedProgress] = useState(null);
   const [hasRestoredPosition, setHasRestoredPosition] = useState(false);
+  const [hasMarkedCompleted, setHasMarkedCompleted] = useState(false);
   
   // Next episode state
   const [nextEpisode, setNextEpisode] = useState(null);
@@ -148,6 +149,12 @@ function Player() {
         setSavedProgress(progress);
       }
     });
+  }, [videoPath]);
+
+  // Reset session-specific flags when the video changes
+  useEffect(() => {
+    setHasRestoredPosition(false);
+    setHasMarkedCompleted(false);
   }, [videoPath]);
 
   // Fetch next episode info
@@ -288,6 +295,26 @@ function Player() {
     
     return () => clearInterval(saveInterval);
   }, [videoPath, playing, displayTitle, isTranscoding, transcodeStartTime, totalDuration]);
+
+  // When playback passes ~95%, eagerly mark as completed so history/resume reflect latest session
+  useEffect(() => {
+    if (!videoPath || !totalDuration || hasMarkedCompleted) return;
+
+    const percent = totalDuration > 0 ? (actualCurrentTime / totalDuration) * 100 : 0;
+    if (percent >= 95) {
+      setHasMarkedCompleted(true);
+      const finalTime = totalDuration;
+
+      console.log('[Player] Marking item as completed at', finalTime, 'seconds');
+      saveWatchProgress({
+        path: videoPath,
+        title: displayTitle,
+        type: 'movie',
+        currentTime: finalTime,
+        duration: totalDuration
+      });
+    }
+  }, [videoPath, totalDuration, actualCurrentTime, displayTitle, hasMarkedCompleted]);
 
   // Save progress on pause and before leaving
   useEffect(() => {

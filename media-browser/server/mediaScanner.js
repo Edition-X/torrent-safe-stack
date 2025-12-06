@@ -4,6 +4,7 @@ const path = require('path');
 // Video file extensions to look for
 const VIDEO_EXTENSIONS = ['.mkv', '.mp4', '.avi', '.mov', '.wmv', '.m4v', '.webm'];
 const SUBTITLE_EXTENSIONS = ['.srt', '.vtt', '.sub', '.ass'];
+const MIN_MOVIE_SIZE_BYTES = 200 * 1024 * 1024;
 
 // Common patterns for parsing media filenames
 const TV_PATTERNS = [
@@ -180,6 +181,7 @@ function formatBytes(bytes) {
 function organizeMedia(mediaList) {
   const tvShows = {};
   const movies = [];
+  const samples = [];
   
   for (const item of mediaList) {
     if (item.type === 'tv') {
@@ -217,6 +219,21 @@ function organizeMedia(mediaList) {
         (a, b) => a.episodeNumber - b.episodeNumber
       );
     } else {
+      if (item.size < MIN_MOVIE_SIZE_BYTES) {
+        samples.push({
+          id: generateId(item.title + (item.year || '')),
+          title: item.title,
+          type: 'movie',
+          year: item.year,
+          quality: item.quality,
+          path: item.path,
+          size: item.size,
+          sizeFormatted: item.sizeFormatted,
+          subtitles: item.subtitles
+        });
+        continue;
+      }
+
       movies.push({
         id: generateId(item.title + (item.year || '')),
         title: item.title,
@@ -241,10 +258,12 @@ function organizeMedia(mediaList) {
   // Sort alphabetically
   tvShowsArray.sort((a, b) => a.title.localeCompare(b.title));
   movies.sort((a, b) => a.title.localeCompare(b.title));
+  samples.sort((a, b) => a.title.localeCompare(b.title));
   
   return {
     tvShows: tvShowsArray,
     movies,
+    samples,
     stats: {
       totalTvShows: tvShowsArray.length,
       totalMovies: movies.length,

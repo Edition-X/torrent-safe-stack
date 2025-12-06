@@ -23,7 +23,7 @@ function MediaRow({ title, items, type = 'movie', historyByPath }) {
       {/* Scroll buttons */}
       <button
         onClick={() => scroll('left')}
-        className="absolute left-0 top-1/2 -translate-y-1/2 z-10 bg-black/60 hover:bg-black/80 text-white p-2 rounded-r-lg opacity-0 group-hover/row:opacity-100 transition-opacity hidden sm:block"
+        className="absolute left-0 top-1/2 -translate-y-1/2 z-10 bg-black/60 hover:bg-black/80 text-white p-2 rounded-r-lg transition-opacity hidden sm:block"
         style={{ marginTop: '20px' }}
       >
         <ChevronLeft size={28} />
@@ -31,7 +31,7 @@ function MediaRow({ title, items, type = 'movie', historyByPath }) {
 
       <button
         onClick={() => scroll('right')}
-        className="absolute right-0 top-1/2 -translate-y-1/2 z-10 bg-black/60 hover:bg-black/80 text-white p-2 rounded-l-lg opacity-0 group-hover/row:opacity-100 transition-opacity hidden sm:block"
+        className="absolute right-0 top-1/2 -translate-y-1/2 z-10 bg-black/60 hover:bg-black/80 text-white p-2 rounded-l-lg transition-opacity hidden sm:block"
         style={{ marginTop: '20px' }}
       >
         <ChevronRight size={28} />
