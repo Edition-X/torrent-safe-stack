@@ -5,6 +5,7 @@ clamav/db/
 gluetun/
 .DS_Store
 dls/
+dls
 media-browser/data/
 media-browser/client/node_modules/
 media-browser/client/dist/
