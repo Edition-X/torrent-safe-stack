@@ -138,53 +138,79 @@ function createTranscodeStream(filePath, options = {}) {
     crf = 23,
     startTime = null,
     upscale4k = false,
+    // Media info to determine if we can copy video stream
+    mediaInfo = null,
   } = options;
+
+  // Determine if we can copy video (much faster) or need to re-encode
+  const canCopyVideo = mediaInfo && 
+    !mediaInfo.videoNeedsTranscode && 
+    !mediaInfo.is10Bit && 
+    !upscale4k;
 
   const args = [
     '-hide_banner',
     '-loglevel', 'error',
   ];
 
-  // Add start time if seeking
+  // Add start time if seeking (before -i for fast seek)
   if (startTime !== null && startTime > 0) {
     args.push('-ss', startTime.toString());
   }
 
-  // Determine video filter based on upscale option
-  let videoFilter;
-  let bitrate = videoBitrate;
-  let bufsize = '8M';
-  
-  if (upscale4k) {
-    // Upscale to 4K with lanczos algorithm and sharpening
-    videoFilter = 'scale=3840:2160:flags=lanczos,unsharp=5:5:0.8:5:5:0.4,setpts=PTS-STARTPTS';
-    bitrate = '15M'; // Higher bitrate for 4K
-    bufsize = '30M';
-    console.log('[Transcode] Upscaling to 4K');
+  args.push('-i', filePath);
+
+  if (canCopyVideo) {
+    // Video is already browser-compatible - just copy it (FAST)
+    console.log('[Transcode] Video is compatible, using stream copy');
+    args.push('-c:v', 'copy');
   } else {
-    // Scale down to 1080p for faster transcoding
-    videoFilter = 'scale=1920:-2,setpts=PTS-STARTPTS';
+    // Video needs re-encoding
+    console.log('[Transcode] Video needs re-encoding');
+    
+    // Determine video filter based on upscale option
+    let videoFilter;
+    let bitrate = videoBitrate;
+    let bufsize = '8M';
+    
+    if (upscale4k) {
+      // Upscale to 4K with lanczos algorithm and sharpening
+      videoFilter = 'scale=3840:2160:flags=lanczos,unsharp=5:5:0.8:5:5:0.4,setpts=PTS-STARTPTS';
+      bitrate = '15M'; // Higher bitrate for 4K
+      bufsize = '30M';
+      console.log('[Transcode] Upscaling to 4K');
+    } else {
+      // Scale down to 1080p for faster transcoding
+      videoFilter = 'scale=1920:-2,setpts=PTS-STARTPTS';
+    }
+
+    args.push(
+      '-c:v', videoCodec,
+      '-preset', preset,
+      '-crf', crf.toString(),
+      '-maxrate', bitrate,
+      '-bufsize', bufsize,
+      '-vf', videoFilter
+    );
   }
 
+  // Audio always needs transcoding if we're here (to AAC)
   args.push(
-    '-i', filePath,
-    // Video encoding
-    '-c:v', videoCodec,
-    '-preset', preset,
-    '-crf', crf.toString(),
-    '-maxrate', bitrate,
-    '-bufsize', bufsize,
-    '-vf', videoFilter,
-    // Audio encoding - reset audio timestamps to sync with video
     '-c:a', audioCodec,
     '-b:a', audioBitrate,
-    '-ac', '2', // Stereo
-    '-af', 'asetpts=PTS-STARTPTS',
-    // Output format - fragmented MP4 for streaming
+    '-ac', '2' // Stereo
+  );
+
+  // Only add audio filter if not copying video (to keep A/V sync)
+  if (!canCopyVideo) {
+    args.push('-af', 'asetpts=PTS-STARTPTS');
+  }
+
+  // Output format - fragmented MP4 for streaming
+  args.push(
     '-movflags', 'frag_keyframe+empty_moov+faststart',
     '-avoid_negative_ts', 'make_zero',
     '-f', 'mp4',
-    // Output to stdout
     'pipe:1'
   );
 

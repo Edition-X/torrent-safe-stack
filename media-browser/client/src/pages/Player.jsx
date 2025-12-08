@@ -10,7 +10,9 @@ import {
   SkipBack, 
   SkipForward,
   Settings,
-  Subtitles
+  Subtitles,
+  RotateCcw,
+  ChevronRight
 } from 'lucide-react';
 import { getStreamUrl, getTranscodeUrl, getAutoSubtitleUrl, fetchMediaInfo, saveWatchProgress, fetchWatchProgress, fetchNextEpisode } from '../hooks/useApi';
 
@@ -52,15 +54,17 @@ function Player() {
   const [upscale4k, setUpscale4k] = useState(false);
   const [showQualityMenu, setShowQualityMenu] = useState(false);
 
-  // Go back function with fallback to home
-  const goBack = useCallback(() => {
-    // Check if we have history to go back to
-    if (window.history.length > 2) {
-      navigate(-1);
-    } else {
-      navigate('/');
-    }
-  }, [navigate]);
+  // Fullscreen state for cursor hiding
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Track fullscreen changes
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
 
   // Get video path from URL
   const videoPath = params['*'] || '';
@@ -131,6 +135,20 @@ function Player() {
   const watchShowTitle = isEpisodeFromState ? playbackMeta.showTitle : undefined;
   const watchSeason = isEpisodeFromState ? playbackMeta.season : undefined;
   const watchEpisode = isEpisodeFromState ? playbackMeta.episode : undefined;
+
+  // Go back function - for TV episodes, go to the show page; otherwise go home
+  const goBack = useCallback(() => {
+    if (isEpisodeFromState && playbackMeta?.showTitle) {
+      // Navigate to the TV show page
+      const showSlug = playbackMeta.showTitle
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '');
+      navigate(`/tv/${showSlug}`);
+    } else {
+      navigate('/');
+    }
+  }, [navigate, isEpisodeFromState, playbackMeta]);
 
   // Use auto-subtitle endpoint - include start time offset for transcoded videos
   const autoSubtitleUrl = isTranscoding && transcodeStartTime > 0
@@ -607,6 +625,17 @@ function Player() {
     }
   };
 
+  // Restart episode from the beginning
+  const restartEpisode = useCallback(() => {
+    if (isTranscoding) {
+      setTranscodeStartTime(0);
+      setCurrentTime(0);
+      setLoading(true);
+    } else if (videoRef.current) {
+      videoRef.current.currentTime = 0;
+    }
+  }, [isTranscoding]);
+
   const handleProgressClick = (e) => {
     const video = videoRef.current;
     const progress = progressRef.current;
@@ -677,7 +706,9 @@ function Player() {
   return (
     <div
       ref={containerRef}
-      className="fixed inset-0 z-[100] bg-black flex items-center justify-center"
+      className={`fixed inset-0 z-[100] bg-black flex items-center justify-center ${
+        isFullscreen && !showControls ? 'cursor-none' : ''
+      }`}
       onClick={handleContainerClick}
     >
       {/* Video - only render after probing completes */}
@@ -838,6 +869,14 @@ function Player() {
                 {playing ? <Pause size={28} fill="white" /> : <Play size={28} fill="white" />}
               </button>
               
+              <button 
+                onClick={restartEpisode} 
+                className="text-white hover:text-netflix-red transition-colors"
+                title="Restart"
+              >
+                <RotateCcw size={22} />
+              </button>
+              
               <button onClick={() => skip(-10)} className="text-white hover:text-netflix-red transition-colors">
                 <SkipBack size={24} />
               </button>
@@ -845,6 +884,17 @@ function Player() {
               <button onClick={() => skip(10)} className="text-white hover:text-netflix-red transition-colors">
                 <SkipForward size={24} />
               </button>
+              
+              {nextEpisode && (
+                <button 
+                  onClick={playNextEpisode} 
+                  className="text-white hover:text-netflix-red transition-colors flex items-center space-x-1"
+                  title={`Next: ${nextEpisode.title || `Episode ${nextEpisode.episodeNumber}`}`}
+                >
+                  <ChevronRight size={24} />
+                  <span className="text-sm hidden sm:inline">Next</span>
+                </button>
+              )}
 
               <div className="flex items-center space-x-2 group">
                 <button onClick={toggleMute} className="text-white hover:text-netflix-red transition-colors">

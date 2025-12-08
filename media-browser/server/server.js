@@ -883,17 +883,27 @@ app.get('/api/transcode/*', async (req, res) => {
     
     console.log(`[Transcode] Starting transcode for: ${relativePath}${upscale4k ? ' (4K upscale)' : ''}`);
     
+    // Probe the file to determine if we can copy video stream
+    let mediaInfo = null;
+    try {
+      mediaInfo = await probeMedia(filePath);
+      console.log(`[Transcode] Video: ${mediaInfo.videoCodec} (needs transcode: ${mediaInfo.videoNeedsTranscode}), Audio: ${mediaInfo.audioCodec}`);
+    } catch (probeErr) {
+      console.error('[Transcode] Probe failed, will re-encode everything:', probeErr.message);
+    }
+    
     // Set headers for streaming
     res.setHeader('Content-Type', 'video/mp4');
     res.setHeader('Transfer-Encoding', 'chunked');
     res.setHeader('Cache-Control', 'no-cache');
     
-    // Create transcode stream
+    // Create transcode stream with media info for smart stream selection
     const ffmpeg = createTranscodeStream(filePath, {
       startTime,
       upscale4k,
       preset: upscale4k ? 'faster' : 'fast', // Use faster preset for 4K to reduce CPU load
-      crf: upscale4k ? 20 : 23 // Slightly better quality for 4K
+      crf: upscale4k ? 20 : 23, // Slightly better quality for 4K
+      mediaInfo // Pass media info for smart copy decision
     });
     
     // Pipe FFmpeg output to response
